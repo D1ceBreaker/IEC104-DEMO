@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: asu_server
+    working_dir: /app
+    volumes:
+      - ./:/app:cached
+    ports:
+      - "2404:2404"
+    restart: unless-stopped
+
+  client:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    container_name: asu_client
+    working_dir: /app
+    volumes:
+      - ./:/app:cached
+    depends_on:
+      - server
+    environment:
+      SERVER_HOST: "server"
+    restart: "no"
