@@ -43,8 +43,26 @@ def main() -> None:
         print(f"[CLIENT] Could not resolve '{server_host}', using as-is")
 
     # Add connection to demo server. Using Init.ALL triggers basic
-    # initialization commands during connect.
-    client.add_connection(ip=server_ip, port=2404, init=c104.Init.ALL)
+    # initialization commands during connect. Keep connection reference.
+    connection = client.add_connection(ip=server_ip, port=2404, init=c104.Init.ALL)
+
+    # When connection becomes open, make sure monitoring is allowed (unmute)
+    def on_state_change(connection_obj: c104.Connection, state: c104.ConnectionState) -> None:
+        print(f"[CLIENT] Connection {connection_obj.ip}:{connection_obj.port} state -> {state}")
+        try:
+            # If open but muted or open, unmute to receive monitoring messages
+            if state in (c104.ConnectionState.OPEN, c104.ConnectionState.OPEN_MUTED):
+                connection_obj.unmute()
+                # request interrogation so server sends current values
+                try:
+                    connection_obj.interrogation(common_address=1)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    if connection:
+        connection.on_state_change(callable=on_state_change)
 
     try:
         client.start()

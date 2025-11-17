@@ -7,6 +7,7 @@ clock sync command.
 
 import time
 import datetime
+import random
 import c104
 
 
@@ -48,6 +49,25 @@ def main() -> None:
     station = server.add_station(common_address=1)
     if station is None:
         print("[SERVER] Failed to add station common_address=1")
+
+    # Add a couple of points and periodic transmit handlers so real IEC104
+    # monitoring messages are produced and sent to connected clients.
+    try:
+        sv_meas = station.add_point(io_address=11, type=c104.Type.M_ME_NC_1, report_ms=2000)
+        sv_sp = station.add_point(io_address=1, type=c104.Type.M_SP_NA_1, report_ms=3000)
+
+        def on_meas_autotransmit(point: c104.Point) -> None:
+            # random measurement value
+            point.value = round(random.uniform(0, 100), 2)
+
+        def on_sp_autotransmit(point: c104.Point) -> None:
+            # toggle boolean single point
+            point.value = not bool(point.value)
+
+        sv_meas.on_before_auto_transmit(callable=on_meas_autotransmit)
+        sv_sp.on_before_auto_transmit(callable=on_sp_autotransmit)
+    except Exception as e:
+        print("[SERVER] Warning: could not add auto-transmit points:", e)
 
     try:
         server.start()
