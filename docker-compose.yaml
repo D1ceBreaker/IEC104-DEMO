@@ -3,18 +3,11 @@
     build:
       context: .
       dockerfile: server/Dockerfile
-    container_name: iec104-server
     ports:
       - "2404:2404"
-
 
   iec104-client:
     build:
       context: .
       dockerfile: client/Dockerfile
-    container_name: iec104-client
-    depends_on:
-      - iec104-server
-    environment:
-      - IEC104_SERVER_HOST=iec104-server
-    command: sh -c "sleep 3 && python client.py"
+
