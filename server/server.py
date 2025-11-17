@@ -12,8 +12,8 @@ import c104
 
 def sv_on_connect(server: c104.Server, ip: str) -> bool:
     print(f"[SERVER] Incoming connection request from {ip}")
-    # Accept only local clients for this demo (or from Docker network 'server')
-    return ip in ("127.0.0.1", "::1", "server")
+    # Accept all connections for the demo (be careful in production!)
+    return True
 
 
 def sv_on_receive_raw(server: c104.Server, data: bytes) -> None:

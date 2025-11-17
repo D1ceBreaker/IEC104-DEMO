@@ -7,6 +7,7 @@ initialization events and any new points.
 
 import os
 import time
+import socket
 import c104
 
 
@@ -33,9 +34,17 @@ def main() -> None:
     client.on_station_initialized(cl_on_station_initialized)
     client.on_new_point(cl_on_new_point)
 
+    # Resolve hostname to IP so the c104 library accepts it (it validates IP).
+    server_ip = server_host
+    try:
+        server_ip = socket.gethostbyname(server_host)
+        print(f"[CLIENT] Resolved server host '{server_host}' -> {server_ip}")
+    except Exception:
+        print(f"[CLIENT] Could not resolve '{server_host}', using as-is")
+
     # Add connection to demo server. Using Init.ALL triggers basic
     # initialization commands during connect.
-    client.add_connection(ip=server_host, port=2404, init=c104.Init.ALL)
+    client.add_connection(ip=server_ip, port=2404, init=c104.Init.ALL)
 
     try:
         client.start()
