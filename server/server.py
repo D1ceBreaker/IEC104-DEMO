@@ -1,46 +1,65 @@
+﻿"""Simple IEC104 demo server using the `iec104`/`c104` python bindings.
+
+Run this file and then start the client to see a basic connect/initialization
+exchange. The server prints raw send/receive frames and handles an incoming
+clock sync command.
+"""
+
+import time
+import datetime
+import c104
 
 
-# IEC-104 server demo using iec-104 library
-# This server accepts IEC-104 connections, activates sessions, and responds to interrogation with simple mock data in a single frame.
-# All IEC-104 frames and exchanges are logged for demonstration purposes.
+def sv_on_connect(server: c104.Server, ip: str) -> bool:
+    print(f"[SERVER] Incoming connection request from {ip}")
+    # Accept only local clients for this demo (or from Docker network 'server')
+    return ip in ("127.0.0.1", "::1", "server")
 
-import os
-from c104 import Server
 
-IEC104_PORT = 2404
+def sv_on_receive_raw(server: c104.Server, data: bytes) -> None:
+    print("[SERVER] RECV RAW ->", data.hex())
+    try:
+        print("          ->", c104.explain_bytes(apdu=data))
+    except Exception:
+        pass
 
-def log(message):
-    print(f"[SERVER] {message}")
 
-# Subclass Server to override event methods
-class DemoServer(Server):
-    def on_connect(self, addr):
-        log(f"Client connected: {addr}")
+def sv_on_send_raw(server: c104.Server, data: bytes) -> None:
+    print("[SERVER] SEND RAW ->", data.hex())
+    try:
+        print("         <-", c104.explain_bytes(apdu=data))
+    except Exception:
+        pass
 
-    def on_activate(self, addr):
-        log(f"IEC-104 session activated for client: {addr}")
 
-    def on_interrogation(self, addr, common_addr):
-        log(f"Received general interrogation request from {addr}, common_addr={common_addr}")
-        mock_value = "42"
-        asdu = {
-            "type_id": 9,              # Measured value
-            "cause_tx": 20,            # Response to interrogation
-            "common_addr": common_addr,
-            "ioa": 1,                  # Information object address
-            "value": mock_value        # Mock value (simple string)
-        }
-        self.send_asdu(addr, asdu)
-        log(f"Mock data sent: {asdu}")
+def sv_on_clock_sync(server: c104.Server, ip: str, date_time: datetime.datetime) -> c104.ResponseState:
+    print(f"[SERVER] Clock sync from {ip} -> {date_time}")
+    return c104.ResponseState.SUCCESS
 
-    def on_frame(self, addr, frame):
-        log(f"Frame from {addr}: {frame}")
 
-    def on_error(self, addr, exc):
-        log(f"Error for {addr}: {exc}")
+def main() -> None:
+    server = c104.Server(ip="0.0.0.0", port=2404)
+    server.on_connect(sv_on_connect)
+    server.on_receive_raw(sv_on_receive_raw)
+    server.on_send_raw(sv_on_send_raw)
+    server.on_clock_sync(sv_on_clock_sync)
+
+    # Add a station that the server will host (common address 1)
+    station = server.add_station(common_address=1)
+    if station is None:
+        print("[SERVER] Failed to add station common_address=1")
+
+    try:
+        server.start()
+        print(f"[SERVER] Listening on {server.ip}:{server.port}")
+        # Keep running until Ctrl-C
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("[SERVER] Stopping server")
+    finally:
+        server.stop()
+
 
 if __name__ == "__main__":
-    # Create IEC-104 server (use positional arguments for ip and port)
-    server = DemoServer(os.environ.get('SERVER_HOST', '0.0.0.0'), IEC104_PORT)
-    log(f"Starting IEC-104 server on port {IEC104_PORT}")
-    server.start()
+    main()

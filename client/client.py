@@ -1,39 +1,53 @@
+﻿"""Simple IEC104 demo client using the `iec104`/`c104` python bindings.
 
-
-# IEC-104 client demo using iec-104 library
-# This client connects to an IEC-104 server, activates the session, sends a general interrogation (C_IC_NA_1), and logs all frames.
-# All IEC-104 logic is handled by the library for clarity and reliability.
+Start `server.py` first, then run this client. The client will add a connection
+to the server host (controlled by `SERVER_HOST` env var) and print station
+initialization events and any new points.
+"""
 
 import os
-from c104 import Client
+import time
+import c104
 
-SERVER_HOST = os.environ.get('SERVER_HOST', '127.0.0.1')
-SERVER_PORT = 2404
 
-def log(message):
-    print(f"[CLIENT] {message}")
+def cl_on_new_station(client: c104.Client, connection: c104.Connection, common_address: int) -> None:
+    print(f"[CLIENT] New station reported by connection {connection.ip}:{connection.port} -> CA={common_address}")
+    # create a local station representation so we can receive points
+    connection.add_station(common_address=common_address)
 
-# Subclass Client to override event methods
-class DemoClient(Client):
-    def on_connect(self):
-        log("Connection established. Activating session...")
 
-    def on_activate(self):
-        log("IEC-104 session activated. Sending general interrogation command...")
-        # Send general interrogation command (C_IC_NA_1)
-        self.send_interrogation(common_addr=1)
+def cl_on_station_initialized(client: c104.Client, station: c104.Station, cause: c104.Coi) -> None:
+    print(f"[CLIENT] Station {station.common_address} initialized (cause={cause})")
 
-    def on_interrogation_response(self, asdu):
-        log(f"Received interrogation response: {asdu}")
 
-    def on_frame(self, frame):
-        log(f"Frame: {frame}")
+def cl_on_new_point(client: c104.Client, station: c104.Station, io_address: int, point_type: c104.Type) -> None:
+    print(f"[CLIENT] New point: IOA={io_address} type={point_type} from station CA={station.common_address}")
+    # Add the point so subsequent updates arrive on the station object
+    station.add_point(io_address=io_address, type=point_type)
 
-    def on_error(self, exc):
-        log(f"Error: {exc}")
+
+def main() -> None:
+    server_host = os.environ.get("SERVER_HOST", "127.0.0.1")
+    client = c104.Client()
+    client.on_new_station(cl_on_new_station)
+    client.on_station_initialized(cl_on_station_initialized)
+    client.on_new_point(cl_on_new_point)
+
+    # Add connection to demo server. Using Init.ALL triggers basic
+    # initialization commands during connect.
+    client.add_connection(ip=server_host, port=2404, init=c104.Init.ALL)
+
+    try:
+        client.start()
+        print(f"[CLIENT] Client started, connecting to {server_host}:2404")
+        # Keep running so user can Ctrl-C to stop
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("[CLIENT] Stopping client")
+    finally:
+        client.stop()
+
 
 if __name__ == "__main__":
-    # Create IEC-104 client
-    client = DemoClient()
-    log(f"Starting IEC-104 client...")
-    client.start()
+    main()

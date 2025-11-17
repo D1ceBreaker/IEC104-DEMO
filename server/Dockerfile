@@ -1,12 +1,12 @@
-FROM python:3.11-slim
+﻿FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY ../requirements.txt ./
+COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY server ./server
 
-CMD ["sh", "-c", "sleep 1 && python client.py"]
+CMD ["python", "server/server.py"]
 
 EXPOSE 2404
