@@ -1,28 +1,11 @@
-﻿version: "3.8"
+﻿services:
+  iec104-server:
+    build: ./server
+    network_mode: host
 
-services:
-  server:
-    build:
-      context: .
-      dockerfile: server/Dockerfile
-    container_name: asu_server
-    working_dir: /app
-    volumes:
-      - ./:/app:cached
-    ports:
-      - "2404:2404"
-    restart: unless-stopped
-
-  client:
-    build:
-      context: .
-      dockerfile: client/Dockerfile
-    container_name: asu_client
-    working_dir: /app
-    volumes:
-      - ./:/app:cached
+  iec104-client:
+    build: ./client
+    network_mode: host
     depends_on:
-      - server
-    environment:
-      SERVER_HOST: "server"
-    restart: "no"
+      - iec104-server
+    command: sh -c "sleep 2 && python client_demo.py"
