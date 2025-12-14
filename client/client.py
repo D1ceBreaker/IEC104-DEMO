@@ -12,6 +12,16 @@ def cl_on_new_station(client: c104.Client, connection: c104.Connection, common_a
 def cl_on_new_point(client: c104.Client, station: c104.Station, io_address: int, point_type: c104.Type) -> None:
     print(f"[CL] New point IOA={io_address}, type={point_type}")
     point = station.add_point(io_address=io_address, type=point_type)
+
+    def on_receive(point: c104.Point, previous_info: c104.Information, message: c104.IncomingMessage) -> c104.ResponseState:
+        prev_val = getattr(previous_info, "value", None)
+        print(
+            f"[CL] Rx {point.type.name} CA={point.station.common_address} IOA={point.io_address} "
+            f"COT={message.cot.name} val={point.value} prev={prev_val}"
+        )
+        return c104.ResponseState.SUCCESS
+
+    point.on_receive(on_receive)
     key = (station.common_address, io_address)
     known_points[key] = {
         "point": point,
@@ -24,7 +34,9 @@ def cl_on_station_initialized(client: c104.Client, station: c104.Station, cause:
 client = c104.Client(tick_rate_ms=100)
 client.on_new_station(cl_on_new_station)
 client.on_new_point(cl_on_new_point)
-client.on_station_initialized(cl_on_station_initialized)
+# Some c104 builds do not expose on_station_initialized; guard to avoid AttributeError.
+if hasattr(client, "on_station_initialized"):
+    client.on_station_initialized(cl_on_station_initialized)
 
 SERVER_HOST = "127.0.0.1" #os.getenv("IEC104_SERVER_HOST", "iec104-server")
 try:
