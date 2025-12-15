@@ -123,6 +123,9 @@ def run_command_sequence() -> None:
     # Command points: separate IOA range to avoid conflict with monitoring IOAs.
     p_sc = station.add_point(io_address=4000, type=c104.Type.C_SC_NA_1)
     p_se = station.add_point(io_address=4001, type=c104.Type.C_SE_NC_1)
+    p_dc = station.add_point(io_address=4003, type=c104.Type.C_DC_NA_1)
+    p_se_na = station.add_point(io_address=4004, type=c104.Type.C_SE_NA_1)
+    p_se_nb = station.add_point(io_address=4005, type=c104.Type.C_SE_NB_1)
     try:
         p_rp = station.add_point(io_address=4002, type=c104.Type.C_RP_NA_1)
     except ValueError:
@@ -150,13 +153,37 @@ def run_command_sequence() -> None:
         print(f"[CL] TX C_SE_NC_1 IOA=4001 val=123.45 -> {'ok' if ok else 'fail'}")
     time.sleep(0.2)
 
+    # 3b) Double command (C_DC_NA_1) - extra control command for Suricata rules
+    if p_dc:
+        # C_DC_NA_1 expects a c104.Double enum value (OFF/ON/INTERMEDIATE/INDETERMINATE).
+        p_dc.value = c104.Double.ON
+        ok = p_dc.transmit(cause=c104.Cot.ACTIVATION)
+        print(f"[CL] TX C_DC_NA_1 IOA=4003 val=ON -> {'ok' if ok else 'fail'}")
+    time.sleep(0.2)
+
+    # 3c) Setpoint normalized/scaled (C_SE_NA_1 / C_SE_NB_1) - extra setpoint commands for Suricata rules
+    if p_se_na:
+        # C_SE_NA_1 expects a c104.NormalizedFloat instance, not a raw float.
+        p_se_na.value = c104.NormalizedFloat(0.5)
+        ok = p_se_na.transmit(cause=c104.Cot.ACTIVATION)
+        print(f"[CL] TX C_SE_NA_1 IOA=4004 val=0.5 -> {'ok' if ok else 'fail'}")
+    time.sleep(0.2)
+
+    if p_se_nb:
+        # C_SE_NB_1 expects an Int16 value wrapper.
+        p_se_nb.value = c104.Int16(1234)
+        ok = p_se_nb.transmit(cause=c104.Cot.ACTIVATION)
+        print(f"[CL] TX C_SE_NB_1 IOA=4005 val=1234 -> {'ok' if ok else 'fail'}")
+    time.sleep(0.2)
+
     # 4) Clock synchronization (C_CS_NA_1)
     ok = conn.clock_sync(common_address=1, wait_for_response=True)
     print(f"[CL] TX clock_sync(C_CS_NA_1) -> {'ok' if ok else 'fail'}")
     time.sleep(0.2)
 
     # 5) Test command (C_TS_NA_1)
-    ok = conn.test(common_address=1, with_time=True, wait_for_response=True)
+    # Use with_time=False to send C_TS_NA_1 (TypeID 104), matching rules.txt.
+    ok = conn.test(common_address=1, with_time=False, wait_for_response=True)
     print(f"[CL] TX test(C_TS_NA_1) -> {'ok' if ok else 'fail'}")
     time.sleep(0.2)
 

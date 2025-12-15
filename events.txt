@@ -1,0 +1,48 @@
+# IEC104 Protocol decoder event rules.
+#
+# This SIDs fall in the 2280000+ range. See:
+#    http://doc.emergingthreats.net/bin/view/Main/SidAllocation
+
+# Malformed IEC104 frame
+alert iec104 any any -> any any (msg:"SURICATA IEC104 Malformed frame"; \
+      app-layer-event:iec104.malformed; classtype:protocol-command-decode; sid:2280000; rev:1;)
+
+# Invalid length field in IEC104 frame
+alert iec104 any any -> any any (msg:"SURICATA IEC104 Invalid length"; \
+      app-layer-event:iec104.invalid_length; classtype:protocol-command-decode; sid:2280001; rev:1;)
+
+# Invalid Type ID in IEC104 ASDU
+alert iec104 any any -> any any (msg:"SURICATA IEC104 Invalid Type ID"; \
+      app-layer-event:iec104.invalid_type_id; classtype:protocol-command-decode; sid:2280002; rev:1;)
+
+# Invalid COT (Cause of Transmission) in IEC104 ASDU
+alert iec104 any any -> any any (msg:"SURICATA IEC104 Invalid COT"; \
+      app-layer-event:iec104.invalid_cot; classtype:protocol-command-decode; sid:2280003; rev:1;)
+
+# Invalid ASDU Address
+alert iec104 any any -> any any (msg:"SURICATA IEC104 Invalid ASDU Address"; \
+      app-layer-event:iec104.invalid_asdu_addr; classtype:protocol-command-decode; sid:2280004; rev:1;)
+
+# Invalid IOA (Information Object Address)
+alert iec104 any any -> any any (msg:"SURICATA IEC104 Invalid IOA"; \
+      app-layer-event:iec104.invalid_ioa; classtype:protocol-command-decode; sid:2280005; rev:1;)
+
+# Unknown Type ID (valid range but not standard)
+alert iec104 any any -> any any (msg:"SURICATA IEC104 Unknown Type ID"; \
+      app-layer-event:iec104.unknown_type_id; classtype:protocol-command-decode; sid:2280006; rev:1;)
+
+# Unknown COT (valid range but not standard)
+alert iec104 any any -> any any (msg:"SURICATA IEC104 Unknown COT"; \
+      app-layer-event:iec104.unknown_cot; classtype:protocol-command-decode; sid:2280007; rev:1;)
+
+# Control command detected (C_SC_NA_1, C_DC_NA_1, etc.)
+alert iec104 any any -> any any (msg:"SURICATA IEC104 Control command detected"; \
+      app-layer-event:iec104.control_command; flow:to_server; classtype:attempted-user; sid:2280008; rev:1;)
+
+# Setpoint command detected (C_SE_NA_1, C_SE_NB_1, C_SE_NC_1, etc.)
+alert iec104 any any -> any any (msg:"SURICATA IEC104 Setpoint command detected"; \
+      app-layer-event:iec104.setpoint_command; flow:to_server; classtype:attempted-user; sid:2280009; rev:1;)
+
+# Request flood detected
+alert iec104 any any -> any any (msg:"SURICATA IEC104 Request flood detected"; \
+      app-layer-event:iec104.flooded; flow:to_server; classtype:protocol-command-decode; sid:2280010; rev:1;)

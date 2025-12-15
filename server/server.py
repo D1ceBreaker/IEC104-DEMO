@@ -66,6 +66,9 @@ meas_second = [
 # Command points moved to separate IOA range (to avoid conflicts with monitoring IOAs)
 cmd_sc = station.add_point(io_address=4000, type=c104.Type.C_SC_NA_1)
 cmd_se = station.add_point(io_address=4001, type=c104.Type.C_SE_NC_1)
+cmd_dc = station.add_point(io_address=4003, type=c104.Type.C_DC_NA_1)
+cmd_se_na = station.add_point(io_address=4004, type=c104.Type.C_SE_NA_1)
+cmd_se_nb = station.add_point(io_address=4005, type=c104.Type.C_SE_NB_1)
 try:
     cmd_rp = station.add_point(io_address=4002, type=c104.Type.C_RP_NA_1)
 except ValueError:
@@ -83,7 +86,7 @@ def sv_on_command(point: c104.Point, previous_info: c104.Information, message: c
     return c104.ResponseState.SUCCESS
 
 
-for p in (cmd_sc, cmd_se, cmd_rp):
+for p in (cmd_sc, cmd_se, cmd_dc, cmd_se_na, cmd_se_nb, cmd_rp):
     if p is not None:
         p.on_receive(sv_on_command)
 
