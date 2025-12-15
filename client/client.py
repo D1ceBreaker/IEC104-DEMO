@@ -2,8 +2,10 @@
 import socket
 import os
 import time
+import threading
 
 known_points = {}
+stop_event = threading.Event()
 
 def cl_on_new_station(client: c104.Client, connection: c104.Connection, common_address: int) -> None:
     print(f"[CL] Discovered station {common_address}")
@@ -49,11 +51,138 @@ conn = client.add_connection(ip=server_ip, port=2404)
 if not conn:
     raise RuntimeError("Failed to connect")
 
+def con_on_receive_raw(connection: c104.Connection, data: bytes) -> None:
+    try:
+        explained = c104.explain_bytes(apdu=data)
+    except Exception:
+        explained = "?"
+    print(f"[CL] --> {explained} [{data.hex()}] | CON {connection.ip}:{connection.port}")
+
+
+def con_on_send_raw(connection: c104.Connection, data: bytes) -> None:
+    try:
+        explained = c104.explain_bytes(apdu=data)
+    except Exception:
+        explained = "?"
+    print(f"[CL] <-- {explained} [{data.hex()}] | CON {connection.ip}:{connection.port}")
+
+
+conn.on_receive_raw(con_on_receive_raw)
+conn.on_send_raw(con_on_send_raw)
+
 client.start()
 print("[CL] Client started")
 
+def wait_connected(timeout_s: float = 10.0) -> bool:
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        if conn.is_connected:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def wait_for_values(ca: int, ioas: list, expected: list, timeout_s: float = 5.0, tol: float = 0.02) -> bool:
+    """
+    Wait until all points (ca, ioa) exist in known_points and their values match expected within tol.
+    Returns True if satisfied before timeout, else False.
+    """
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        ok = True
+        for ioa, exp in zip(ioas, expected):
+            info = known_points.get((ca, ioa))
+            if not info:
+                ok = False
+                break
+            val = info["point"].value
+            try:
+                if abs(float(val) - float(exp)) > tol:
+                    ok = False
+                    break
+            except Exception:
+                ok = False
+                break
+        if ok:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def run_command_sequence() -> None:
+    if not wait_connected():
+        print("[CL] Connection did not become active in time")
+        stop_event.set()
+        return
+
+    # Ensure station exists on the connection (so we can add command points)
+    station = conn.get_station(common_address=1) or conn.add_station(common_address=1)
+    if not station:
+        raise RuntimeError("Cannot create/get station CA=1 on connection")
+
+    # Command points: separate IOA range to avoid conflict with monitoring IOAs.
+    p_sc = station.add_point(io_address=4000, type=c104.Type.C_SC_NA_1)
+    p_se = station.add_point(io_address=4001, type=c104.Type.C_SE_NC_1)
+    try:
+        p_rp = station.add_point(io_address=4002, type=c104.Type.C_RP_NA_1)
+    except ValueError:
+        p_rp = None
+        print("[CL] NOTE: C_RP_NA_1 is not supported as a Point type in this c104 build; skipping IOA=4002")
+
+    print("[CL] Starting command sequence (a.py-equivalent semantics)")
+
+    # 1) Interrogation (C_IC_NA_1, QOI=STATION (20))
+    ok = conn.interrogation(common_address=1, cause=c104.Cot.ACTIVATION, qualifier=c104.Qoi.STATION, wait_for_response=True)
+    print(f"[CL] TX interrogation(C_IC_NA_1,QOI=STATION) -> {'ok' if ok else 'fail'}")
+    time.sleep(0.2)
+
+    # 2) Single command (C_SC_NA_1)
+    if p_sc:
+        p_sc.value = True
+        ok = p_sc.transmit(cause=c104.Cot.ACTIVATION)
+        print(f"[CL] TX C_SC_NA_1 IOA=4000 val=True -> {'ok' if ok else 'fail'}")
+    time.sleep(0.2)
+
+    # 3) Setpoint command float (C_SE_NC_1)
+    if p_se:
+        p_se.value = 123.45
+        ok = p_se.transmit(cause=c104.Cot.ACTIVATION)
+        print(f"[CL] TX C_SE_NC_1 IOA=4001 val=123.45 -> {'ok' if ok else 'fail'}")
+    time.sleep(0.2)
+
+    # 4) Clock synchronization (C_CS_NA_1)
+    ok = conn.clock_sync(common_address=1, wait_for_response=True)
+    print(f"[CL] TX clock_sync(C_CS_NA_1) -> {'ok' if ok else 'fail'}")
+    time.sleep(0.2)
+
+    # 5) Test command (C_TS_NA_1)
+    ok = conn.test(common_address=1, with_time=True, wait_for_response=True)
+    print(f"[CL] TX test(C_TS_NA_1) -> {'ok' if ok else 'fail'}")
+    time.sleep(0.2)
+
+    # 6) Reset process (C_RP_NA_1) - send QRP=1 (general reset) as integer
+    if p_rp:
+        p_rp.value = 1
+        ok = p_rp.transmit(cause=c104.Cot.ACTIVATION)
+        print(f"[CL] TX C_RP_NA_1 IOA=4002 qrp=1 -> {'ok' if ok else 'fail'}")
+    else:
+        print("[CL] TX C_RP_NA_1 skipped (unsupported Point type)")
+
+    # Keep connection open until the server finishes its scripted monitoring sequence.
+    # Otherwise server-side transmit() for IOA=3000..3002 may fail due to disconnect.
+    ioas = [3000, 3001, 3002]
+    expected = [1.23, 4.56, 7.89]
+    if wait_for_values(ca=1, ioas=ioas, expected=expected, timeout_s=6.0):
+        print("[CL] Observed meas_second (IOA=3000..3002); disconnecting")
+    else:
+        print("[CL] Timeout waiting for meas_second (IOA=3000..3002); disconnecting anyway")
+    stop_event.set()
+
+
+threading.Thread(target=run_command_sequence, daemon=True).start()
+
 try:
-    while True:
+    while not stop_event.is_set():
         for key, info in known_points.items():
             current = info["point"].value
             last = info["last_value"]
